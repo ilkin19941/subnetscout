@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # нужна полная история тегов для git describe в build.gradle
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -33,13 +35,25 @@ jobs:
           echo "version=$full" >> $env:GITHUB_OUTPUT
 
       - name: Build Windows jar (gradlew win64)
-        run: .\gradlew.bat win64
+        shell: pwsh
+        run: |
+          .\gradlew.bat win64
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "gradlew win64 завершился с кодом $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
 
       - name: Find built jar
         id: jar
         shell: pwsh
         run: |
-          $jar = Get-ChildItem -Path build\libs -Filter "*-win.jar" | Select-Object -First 1
+          Write-Host "Содержимое build\libs:"
+          Get-ChildItem -Path build\libs -Recurse -ErrorAction SilentlyContinue | Format-Table FullName
+          $jar = Get-ChildItem -Path build\libs -Filter "*-win.jar" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $jar) {
+            Write-Error "Не найден jar-файл вида *-win.jar в build\libs — сборка gradle не создала ожидаемый файл"
+            exit 1
+          }
           echo "path=$($jar.FullName)" >> $env:GITHUB_OUTPUT
 
       - name: Locate or install makeappx.exe
@@ -71,6 +85,10 @@ jobs:
           $bin = "${{ steps.sdk.outputs.bin }}"
           if ($bin -eq '') { $bin = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64" }
           .\build-msix.ps1 -Version "${{ steps.ver.outputs.version }}" -JarPath "${{ steps.jar.outputs.path }}" -WindowsKitBin $bin
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "build-msix.ps1 завершился с кодом $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
 
       - name: Upload MSIX artifact
         uses: actions/upload-artifact@v4
