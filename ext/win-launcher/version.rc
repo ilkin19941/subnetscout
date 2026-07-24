@@ -1,0 +1,23 @@
+1 ICON "../../resources/images/icon.ico"
+1 VERSIONINFO
+FILEVERSION     3,9,9,9
+PRODUCTVERSION  3,9,9,9
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904E4"
+    BEGIN
+      VALUE "CompanyName", "SubNet Scout"
+      VALUE "FileDescription", "SubNet Scout - fast network scanner"
+      VALUE "InternalName", "subnetscout"
+      VALUE "LegalCopyright", "SubNet Scout contributors (based on Angry IP Scanner by Anton Keks)"
+      VALUE "OriginalFilename", "subnetscout.exe"
+      VALUE "ProductName", "SubNet Scout"
+      VALUE "ProductVersion", "3+"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1252
+  END
+END

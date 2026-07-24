@@ -1,0 +1,83 @@
+name: Build MSIX
+
+on:
+  push:
+    tags:
+      - 'v*'          # запускается при пуше тега, например v1.0.0
+  workflow_dispatch:    # плюс можно запускать вручную из вкладки Actions
+
+jobs:
+  build-msix:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Extract version from tag
+        id: ver
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag -replace '^v', ''
+          # Приводим к формату a.b.c.d, если пришло не 4 числа
+          $parts = $version -split '\.'
+          while ($parts.Count -lt 4) { $parts += "0" }
+          $full = ($parts[0..3] -join '.')
+          echo "version=$full" >> $env:GITHUB_OUTPUT
+
+      - name: Build Windows jar (gradlew win64)
+        run: .\gradlew.bat win64
+
+      - name: Find built jar
+        id: jar
+        shell: pwsh
+        run: |
+          $jar = Get-ChildItem -Path build\libs -Filter "*-win.jar" | Select-Object -First 1
+          echo "path=$($jar.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Locate or install makeappx.exe
+        id: sdk
+        shell: pwsh
+        run: |
+          # windows-latest обычно уже содержит Windows SDK (тянется с Visual Studio Build Tools) —
+          # сначала пробуем найти makeappx.exe на раннере, чтобы не тратить время на лишнюю установку
+          $found = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin" -Filter "makeappx.exe" -Recurse -ErrorAction SilentlyContinue |
+                   Sort-Object FullName -Descending | Select-Object -First 1
+          if ($found) {
+            echo "Найден готовый Windows SDK: $($found.FullName)"
+            echo "bin=$($found.DirectoryName)" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "Windows SDK на раннере не найден, потребуется отдельная установка (см. следующий шаг)"
+            echo "bin=" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Install Windows SDK (fallback, только если не найден выше)
+        if: steps.sdk.outputs.bin == ''
+        uses: GuillaumeFalourd/setup-windows10-sdk-action@v2.5
+        with:
+          sdk-version: 22621
+
+      - name: Build MSIX
+        shell: pwsh
+        run: |
+          cd ext\msix
+          $bin = "${{ steps.sdk.outputs.bin }}"
+          if ($bin -eq '') { $bin = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64" }
+          .\build-msix.ps1 -Version "${{ steps.ver.outputs.version }}" -JarPath "${{ steps.jar.outputs.path }}" -WindowsKitBin $bin
+
+      - name: Upload MSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SubNetScout-msix
+          path: ext/msix/*.msix
+
+      # Дальше опционально: автозагрузка в Partner Center через Store Submission API.
+      # Добавим отдельным шагом, когда закрепите Publisher/App ID в Partner Center
+      # и сохраните учётные данные Azure AD как секреты репозитория.
