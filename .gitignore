@@ -1,0 +1,5 @@
+build/
+.gradle/
+*.class
+ext/msix/stage/
+ext/msix/*.msix

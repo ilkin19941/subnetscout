@@ -289,7 +289,9 @@ packageTask('any') {
 }
 
 packageTask('win64') {
-    winLauncher('win64')
+    if (!project.hasProperty('skipLauncher')) {
+        winLauncher('win64')
+    }
 }
 
 packageTask('macX86') {

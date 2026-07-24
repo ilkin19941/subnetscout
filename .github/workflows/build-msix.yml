@@ -37,7 +37,7 @@ jobs:
       - name: Build Windows jar (gradlew win64)
         shell: pwsh
         run: |
-          .\gradlew.bat win64
+          .\gradlew.bat win64 -PskipLauncher
           if ($LASTEXITCODE -ne 0) {
             Write-Error "gradlew win64 завершился с кодом $LASTEXITCODE"
             exit $LASTEXITCODE

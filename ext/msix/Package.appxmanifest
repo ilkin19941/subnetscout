@@ -6,13 +6,13 @@
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="PLACEHOLDER.SubNetScout"
-    Publisher="CN=PLACEHOLDER-GUID-FROM-PARTNER-CENTER"
+    Name="MAMMADOV.SubNetScout"
+    Publisher="CN=BC5E260E-6F57-4B21-98B6-1B72B543D4A9"
     Version="1.0.0.0" />
 
   <Properties>
     <DisplayName>SubNet Scout</DisplayName>
-    <PublisherDisplayName>PLACEHOLDER Ваше имя издателя из Partner Center</PublisherDisplayName>
+    <PublisherDisplayName>MAMMADOV</PublisherDisplayName>
     <Logo>Assets\Square150x150Logo.png</Logo>
   </Properties>
 
