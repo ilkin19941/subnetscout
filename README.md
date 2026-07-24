@@ -1,7 +1,7 @@
-# Angry IP Scanner
+# SubNet Scout
 
-This is the source code of Angry IP Scanner, licensed with GPL v2. [Official site](https://angryip.org/)
-
+This is the source code of SubNet Scout, a fork of [Angry IP Scanner](https://angryip.org),
+licensed under GPL v2. Original copyright © Anton Keks and contributors.
 The code is written mostly in Java.
 [SWT library from Eclipse project](https://eclipse.org/swt/) is used for GUI that provides native components for each supported platform.
 
