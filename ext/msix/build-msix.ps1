@@ -63,18 +63,23 @@ Move-Item "$appDir\subnetscout\*" $appDir -Force
 Remove-Item "$appDir\subnetscout" -Recurse -Force
 
 Write-Host "== 3. Копируем манифест и ассеты в staging ==" -ForegroundColor Cyan
-Copy-Item "$root\Package.appxmanifest" $stage
+# makeappx требует, чтобы манифест назывался строго AppxManifest.xml в корне пакета
+Copy-Item "$root\Package.appxmanifest" "$stage\AppxManifest.xml"
 Copy-Item "$root\Assets" $stage -Recurse
 
 # Подставляем реальный номер версии в манифест
-(Get-Content "$stage\Package.appxmanifest") `
+(Get-Content "$stage\AppxManifest.xml") `
     -replace 'Version="1\.0\.0\.0"', "Version=`"$Version`"" |
-    Set-Content "$stage\Package.appxmanifest"
+    Set-Content "$stage\AppxManifest.xml"
 
 Write-Host "== 4. Сборка .msix через makeappx ==" -ForegroundColor Cyan
 $makeappx = Join-Path $WindowsKitBin "makeappx.exe"
 $outMsix = Join-Path $root "SubNetScout-$Version.msix"
 & $makeappx pack /d $stage /p $outMsix /overwrite
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "makeappx завершился с кодом $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
 
 Write-Host "== Готово: $outMsix ==" -ForegroundColor Green
 Write-Host "Для локального теста установки (нужен self-signed сертификат):" -ForegroundColor Yellow
