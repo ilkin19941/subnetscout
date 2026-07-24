@@ -31,8 +31,12 @@ New-Item -ItemType Directory -Path $appDir | Out-Null
 Write-Host "== 2a. jlink: урезанный кастомный JRE (переиспользуем модули проекта) ==" -ForegroundColor Cyan
 $jreOut = Join-Path $stage "custom-jre"
 # Тот же набор модулей, что в build.gradle: java.base, java.prefs, java.logging, jdk.crypto.ec, java.desktop
-jlink --output $jreOut --vm=client --compress=2 --no-header-files --no-man-pages --strip-debug `
+jlink --output $jreOut --compress=2 --no-header-files --no-man-pages --strip-debug `
     --add-modules java.base,java.prefs,java.logging,jdk.crypto.ec,java.desktop
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "jlink завершился с кодом $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
 
 Write-Host "== 2b. jpackage: app-image (jar + урезанный JRE) ==" -ForegroundColor Cyan
 # --type app-image создаёт папку с exe и встроенным JRE, без инсталлятора —
@@ -48,6 +52,10 @@ jpackage `
     --app-version $Version `
     --icon "$root\..\..\resources\images\icon.ico" `
     --dest $appDir
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "jpackage завершился с кодом $LASTEXITCODE"
+    exit $LASTEXITCODE
+}
 
 # jpackage создаёт подпапку app\subnetscout — приводим структуру к той,
 # что ожидает Package.appxmanifest (app\subnetscout.exe)
