@@ -1,0 +1,179 @@
+name: Build Standalone Windows
+
+# Собирает версию для распространения ВНЕ Microsoft Store:
+#   1. Портативный ZIP — распаковал и запустил, Java на машине не нужна (JRE внутри)
+#   2. MSI-инсталлятор — обычная установка с ярлыками (требует WiX на раннере)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Версия в формате 1.0.5.0 (для ручного запуска)'
+        required: true
+        default: '1.0.5.0'
+
+jobs:
+  build-standalone:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Determine version
+        id: ver
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $version = "${{ github.event.inputs.version }}"
+          } else {
+            $version = "${{ github.ref_name }}" -replace '^v', ''
+          }
+          $parts = $version -split '\.'
+          while ($parts.Count -lt 4) { $parts += "0" }
+          $full = ($parts[0..3] -join '.')
+          echo "version=$full" >> $env:GITHUB_OUTPUT
+          Write-Host "Версия сборки: $full"
+
+      - name: Build Windows jar
+        shell: pwsh
+        run: |
+          .\gradlew.bat win64 -PskipLauncher
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Find built jar
+        id: jar
+        shell: pwsh
+        run: |
+          $jar = Get-ChildItem -Path build\libs -Filter "*-win.jar" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $jar) {
+            Write-Error "Не найден jar-файл вида *-win.jar в build\libs"
+            exit 1
+          }
+          echo "path=$($jar.FullName)" >> $env:GITHUB_OUTPUT
+          echo "dir=$($jar.DirectoryName)" >> $env:GITHUB_OUTPUT
+          echo "name=$($jar.Name)" >> $env:GITHUB_OUTPUT
+
+      - name: jlink — урезанный JRE
+        shell: pwsh
+        run: |
+          jlink --output custom-jre --compress=2 --no-header-files --no-man-pages --strip-debug `
+            --add-modules java.base,java.prefs,java.logging,jdk.crypto.ec,java.desktop
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: jpackage — портативный app-image
+        shell: pwsh
+        run: |
+          jpackage `
+            --type app-image `
+            --runtime-image custom-jre `
+            --input "${{ steps.jar.outputs.dir }}" `
+            --main-jar "${{ steps.jar.outputs.name }}" `
+            --main-class net.azib.ipscan.Main `
+            --name SubNetScout `
+            --app-version "${{ steps.ver.outputs.version }}" `
+            --vendor "MAMMADOV" `
+            --icon "resources\images\icon.ico" `
+            --dest portable
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Упаковать портативную версию в ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "portable\SubNetScout\*" `
+            -DestinationPath "SubNetScout-${{ steps.ver.outputs.version }}-portable.zip" -Force
+
+      # --- MSI-инсталлятор (опционально: нужен WiX) ---
+
+      - name: Установить WiX Toolset
+        id: wix
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          choco install wixtoolset --version 3.11.2 -y --no-progress
+          # добавляем WiX в PATH для текущего и последующих шагов
+          $wixBin = "C:\Program Files (x86)\WiX Toolset v3.11\bin"
+          if (Test-Path $wixBin) {
+            echo $wixBin >> $env:GITHUB_PATH
+            Write-Host "WiX установлен: $wixBin"
+          } else {
+            Write-Warning "WiX не найден по ожидаемому пути — шаг сборки MSI будет пропущен"
+          }
+
+      - name: jpackage — MSI-инсталлятор
+        id: msi
+        continue-on-error: true
+        if: steps.wix.outcome == 'success'
+        shell: pwsh
+        run: |
+          jpackage `
+            --type msi `
+            --runtime-image custom-jre `
+            --input "${{ steps.jar.outputs.dir }}" `
+            --main-jar "${{ steps.jar.outputs.name }}" `
+            --main-class net.azib.ipscan.Main `
+            --name SubNetScout `
+            --app-version "${{ steps.ver.outputs.version }}" `
+            --vendor "MAMMADOV" `
+            --description "Fast network scanner" `
+            --icon "resources\images\icon.ico" `
+            --win-menu `
+            --win-shortcut `
+            --win-dir-chooser `
+            --win-per-user-install `
+            --dest installer
+
+      - name: jpackage — EXE-инсталлятор (не требует WiX)
+        id: exe
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          jpackage `
+            --type exe `
+            --runtime-image custom-jre `
+            --input "${{ steps.jar.outputs.dir }}" `
+            --main-jar "${{ steps.jar.outputs.name }}" `
+            --main-class net.azib.ipscan.Main `
+            --name SubNetScout `
+            --app-version "${{ steps.ver.outputs.version }}" `
+            --vendor "MAMMADOV" `
+            --description "Fast network scanner" `
+            --icon "resources\images\icon.ico" `
+            --win-menu `
+            --win-shortcut `
+            --win-dir-chooser `
+            --win-per-user-install `
+            --dest installer
+
+      - name: Показать, что собралось
+        shell: pwsh
+        run: |
+          Write-Host "=== Результаты сборки ==="
+          Get-ChildItem -Path . -Filter "*.zip" | Format-Table Name, Length
+          Get-ChildItem -Path installer -ErrorAction SilentlyContinue | Format-Table Name, Length
+
+      - name: Upload portable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: SubNetScout-portable
+          path: "*.zip"
+
+      - name: Upload installers (MSI и/или EXE)
+        uses: actions/upload-artifact@v4
+        with:
+          name: SubNetScout-installer
+          path: |
+            installer/*.msi
+            installer/*.exe
+          if-no-files-found: warn
